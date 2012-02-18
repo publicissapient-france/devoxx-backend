@@ -1,0 +1,28 @@
+{
+    "name": "xebia-devoxx-2012-node-js-proxy",
+    "description": "Node.js proxy for Devoxx REST API",
+    "version": "1.0.0-SNAPSHOT",
+    "author":"Alexis Kinsella <akinsella@xebia.fr>",
+    "engines": {
+        "node":">= 0.6.0 < 0.7.0"
+    },
+    "keywords": ["node.js", "devoxx", "rest", "api", "proxy", "restler", "express"],
+    "repository": "git@bitbucket.org:akinsella/xebia-devoxx-2012-node-js-proxy.git",
+    "main": "app",
+    "bin": {
+        "express": "./bin/express"
+    },
+    "contributors": [
+        { "name":"Alexis Kinsella", "email":"akinsella@xebia.fr" }
+    ],
+    "dependencies": {
+        "express": "*",
+        "restler": "*",
+        "redis": "*"
+    },
+    "devDependencies": {
+    },
+    "scripts": {
+        "prepublish": "npm prune"
+    }
+}

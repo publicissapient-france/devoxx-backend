@@ -11,7 +11,7 @@ var env = {
     DOTCLOUD_SERVICE_NAME: 'Mac Book Pro',
     DOTCLOUD_DATA_REDIS_HOST: 'localhost',
     DOTCLOUD_DATA_REDIS_LOGIN: undefined,
-    DOTCLOUD_DATA_REDIS_PASSWORD: undefined,
+    DOTCLOUD_DATA_REDIS_PASSWORD: "",
     DOTCLOUD_DATA_REDIS_PORT: '6379',
     DOTCLOUD_DATA_REDIS_URL: undefined
 };
@@ -22,6 +22,31 @@ if (path.existsSync('/home/dotcloud/environment.json')) {
 
 console.log('Application Name: ' + env['DOTCLOUD_SERVICE_NAME']);
 console.log('Env: ' + JSON.stringify(env));
+
+app.configure(function () {
+    app.use(express.static(__dirname + '/www/public'));
+    app.use(express.logger());
+    app.use(express.bodyParser());
+    app.use(express.cookieParser());
+    app.use(express.session({secret:"devoxx-2012" + env['DOTCLOUD_DATA_REDIS_PASSWORD']}));
+    app.use(express.logger());
+    app.use(express.methodOverride());
+
+    app.use(app.router);
+});
+
+
+app.configure('development', function () {
+    app.use(express.errorHandler({ dumpExceptions:true, showStack:true }));
+});
+
+app.configure('production', function () {
+    app.use(express.errorHandler());
+});
+
+
+
+
 
 client = redis.createClient(env['DOTCLOUD_DATA_REDIS_PORT'], env['DOTCLOUD_DATA_REDIS_HOST']);
 
@@ -108,6 +133,15 @@ function sendJsonResponse(options, data) {
     console.log("[" + options.url + "] Response sent: " + response);
     options.res.send(response);
 }
+
+app.get('/', function(req, res) {
+    console.log('File path: ' + __dirname + '/www/index.html');
+    res.sendfile(__dirname + '/www/index.html');
+});
+
+app.get('/index.html', function(req, res) {
+    res.sendfile(__dirname + '/www/index.html');
+});
 
 app.all('/*', function(req, res) {
     try {

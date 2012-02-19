@@ -221,7 +221,7 @@ function processRequest(options) {
                     sendJsonResponse(options, jsonData);
                     if (!options.forceNoCache) {
                         client.set(options.cacheKey, jsonData);
-                        client.expire(options.cacheKey, 60 * 60);
+//                        client.expire(options.cacheKey, 60 * 60);
                     }
                 }
             });

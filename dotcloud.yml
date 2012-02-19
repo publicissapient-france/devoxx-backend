@@ -1,5 +1,5 @@
 www:
   type: nodejs
-    approot: devoxxproxy
+    approot: application
 data:
   type: redis

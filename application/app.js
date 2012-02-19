@@ -44,10 +44,14 @@ app.configure('production', function () {
     app.use(express.errorHandler());
 });
 
+redis.debug_mode = false;
+
 client = redis.createClient(env['DOTCLOUD_DATA_REDIS_PORT'], env['DOTCLOUD_DATA_REDIS_HOST']);
 
 if (env['DOTCLOUD_DATA_REDIS_LOGIN']) {
-    client.auth(env['DOTCLOUD_DATA_REDIS_PASSWORD'], env['DOTCLOUD_DATA_REDIS_LOGIN']);
+    client.auth(env['DOTCLOUD_DATA_REDIS_PASSWORD'], function(err, res) {
+        console.log("Authenticating to redis!");
+    });
 }
 
 process.on('SIGTERM', function () {

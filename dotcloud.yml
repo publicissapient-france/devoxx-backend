@@ -1,5 +1,5 @@
 www:
   type: nodejs
-    approot: application
+  approot: application
 data:
   type: redis

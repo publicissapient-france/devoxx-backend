@@ -44,10 +44,6 @@ app.configure('production', function () {
     app.use(express.errorHandler());
 });
 
-
-
-
-
 client = redis.createClient(env['DOTCLOUD_DATA_REDIS_PORT'], env['DOTCLOUD_DATA_REDIS_HOST']);
 
 if (env['DOTCLOUD_DATA_REDIS_LOGIN']) {
@@ -60,7 +56,7 @@ process.on('SIGTERM', function () {
     process.exit(0);
 });
 
-var appPort = env['PORT_NODEJS '] || 9000;
+var appPort = env['PORT_NODEJS'] || 9000;
 console.log("Express listening on port: " + appPort);
 app.listen(appPort);
 

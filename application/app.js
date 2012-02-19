@@ -55,7 +55,7 @@ if (env['DOTCLOUD_DATA_REDIS_LOGIN']) {
 }
 
 app.use(express.bodyParser());
-app.listen(process.env.PORT || 8080);
+app.listen(env['PORT_NODEJS '] || 9000);
 
 process.on('SIGTERM', function () {
     console.log('Got SIGTERM exiting...');

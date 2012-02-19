@@ -3,12 +3,41 @@ var fs = require('fs'),
     app = express.createServer(),
     restler = require('restler'),
     util = require('util');
+var path = require('path');
 
-var redis = require("redis"),
-    client = redis.createClient();
+var redis = require("redis");
+
+var env = {
+    DOTCLOUD_SERVICE_NAME: 'Mac Book Pro',
+    DOTCLOUD_DATA_REDIS_HOST: 'localhost',
+    DOTCLOUD_DATA_REDIS_LOGIN: undefined,
+    DOTCLOUD_DATA_REDIS_PASSWORD: undefined,
+    DOTCLOUD_DATA_REDIS_PORT: '6379',
+    DOTCLOUD_DATA_REDIS_URL: undefined
+};
+
+if (path.existsSync('/home/dotcloud/environment.json')) {
+    env = JSON.parse(fs.readFileSync('/home/dotcloud/environment.json', 'utf-8'));
+}
+
+console.log('Application Name: ' + env['DOTCLOUD_SERVICE_NAME']);
+console.log('Env: ' + JSON.stringify(env));
+
+client = redis.createClient(env['DOTCLOUD_DATA_REDIS_PORT'], env['DOTCLOUD_DATA_REDIS_HOST']);
+
+if (env['DOTCLOUD_DATA_REDIS_LOGIN']) {
+    client.auth(env['DOTCLOUD_DATA_REDIS_PASSWORD'], env['DOTCLOUD_DATA_REDIS_LOGIN']);
+}
 
 app.use(express.bodyParser());
-app.listen(process.env.PORT || 9000);
+app.listen(process.env.PORT || 8080);
+
+process.on('SIGTERM', function () {
+    console.log('Got SIGTERM exiting...');
+    // do some cleanup here
+    process.exit(0);
+});
+
 
 client.on("error", function (err) {
     console.log("Error " + err);

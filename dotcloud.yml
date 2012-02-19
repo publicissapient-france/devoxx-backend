@@ -1,2 +1,5 @@
 www:
-  type: static
+  type: nodejs
+    approot: devoxx-proxy
+data:
+  type: redis

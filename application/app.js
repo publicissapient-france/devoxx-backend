@@ -54,15 +54,15 @@ if (env['DOTCLOUD_DATA_REDIS_LOGIN']) {
     client.auth(env['DOTCLOUD_DATA_REDIS_PASSWORD'], env['DOTCLOUD_DATA_REDIS_LOGIN']);
 }
 
-app.use(express.bodyParser());
-app.listen(env['PORT_NODEJS '] || 9000);
-
 process.on('SIGTERM', function () {
     console.log('Got SIGTERM exiting...');
     // do some cleanup here
     process.exit(0);
 });
 
+var appPort = env['PORT_NODEJS '] || 9000;
+console.log("Express listening on port: " + appPort);
+app.listen(appPort);
 
 client.on("error", function (err) {
     console.log("Error " + err);

@@ -1,96 +1,40 @@
-var fs = require('fs');
-var express = require('express');
-var restler = require('restler');
-var util = require('util');
+var fs = require('fs'),
+    express = require('express'),
+    app = express.createServer(),
+    restler = require('restler'),
+    util = require('util');
 var path = require('path');
+
 var redis = require("redis");
-var mysql = require('mysql');
-var underscore = require("underscore");
+
 var cf = require("cloudfoundry");
 
-var _ = underscore._;
+var env = {
+    DOTCLOUD_SERVICE_NAME: 'Mac Book Pro',
+    DOTCLOUD_DATA_REDIS_HOST: 'localhost',
+    DOTCLOUD_DATA_REDIS_LOGIN: undefined,
+    DOTCLOUD_DATA_REDIS_PASSWORD: "",
+    DOTCLOUD_DATA_REDIS_PORT: '6379',
+    DOTCLOUD_DATA_REDIS_URL: undefined
+};
 
-if(!cf.app) {
+// app.listen((cloudfoundry.port || 3000), (cloudfoundry.host || ‘localhost’));
 
-   var LOCAL_CF_CONFIG = {
-       cloud: false,
-       host: 'localhost',
-       port: 9000,
-       app: {
-           instance_id: '7bcc459686eda42a8d696b3b398ed6d1',
-           instance_index: 0,
-           name: 'devoxx-data',
-           uris: ['devoxx-data.cloudfoundry.com'],
-           users: ['akinsella@xebia.fr'],
-           version: '11ad1709af24f01286b2799bc90553454cdb96c6-1',
-           start: '2012-02-23 19:23:39 +0000',
-           runtime: 'node',
-           state_timestamp: 1324796219,
-           port: 9000,
-           limits: {
-               fds: 256,
-               mem: 134217728,
-               disk: 2147483648
-           },
-           host:'localhost'
-       },
-       services: {
-           'redis-2.2': [{
-                   name: 'devoxx-data-redis',
-                   label: 'redis-2.2',
-                   plan: 'free',
-                   credentials: {
-                       node_id: 'redis_node_2',
-                       host: 'localhost',
-                       hostname: 'localhost',
-                       port: 6379,
-                       password: '',
-                       name: 'devoxx-data',
-                       username: 'devoxx-data'
-                   },
-                   version: '2.2'
-               }],
-               'mysql-5.1': [{
-                   name: 'devoxx-data-mysql',
-                   label: 'mysql-5.1',
-                   plan: 'free',
-                   tags:["mysql","mysql-5.1","relational"],
-                   credentials: {
-                       node_id: 'mysql_node_4',
-                       host: 'localhost',
-                       hostname: 'localhost',
-                       port: 3306,
-                       password: 'devoxx-data',
-                       name: 'devoxx-data',
-                       user: 'devoxx-data',
-                       username: 'devoxx-data'
-                   },
-                   version: '5.1'
-               }]
-       }
-   };
-
-   cf = _.extend(cf, LOCAL_CF_CONFIG);
+if (path.existsSync('/home/dotcloud/environment.json')) {
+    env = JSON.parse(fs.readFileSync('/home/dotcloud/environment.json', 'utf-8'));
 }
 
-var app = express.createServer();
+console.log('Application Name: ' + env['DOTCLOUD_SERVICE_NAME']);
+console.log('Env: ' + JSON.stringify(env));
 
-var redisConfig = cf.services["redis-2.2"][0];
-var mysqlConfig = cf.services["mysql-5.1"][0];
-
-console.log('Application Name: ' + cf.app.name);
-console.log('Env: ' + JSON.stringify(cf));
-
-app.configure(function() {
+app.configure(function () {
     app.use(express.static(__dirname + '/public'));
     app.use(express.logger());
     app.use(express.bodyParser());
     app.use(express.cookieParser());
-    app.use(express.session({secret: cf.app.instance_id}));
+    app.use(express.session({secret:"devoxx-2012" + env['DOTCLOUD_DATA_REDIS_PASSWORD']}));
     app.use(express.logger());
     app.use(express.methodOverride());
-    app.set('running in cloud', cf.cloud);
-
     app.use(app.router);
 });
 
@@ -103,31 +47,12 @@ app.configure('production', function () {
     app.use(express.errorHandler());
 });
 
-var mysqlOptions = {
-    host: mysqlConfig.credentials.hostname,
-    port: mysqlConfig.credentials.port,
-    database: mysqlConfig.credentials.name,
-    user: mysqlConfig.credentials.user,
-    password: mysqlConfig.credentials.password,
-    debug: false
-};
-
-var mysqlClient = mysql.createClient(mysqlOptions);
-console.log('Env: ' + JSON.stringify(mysqlOptions));
-
 redis.debug_mode = false;
 
-var redisClient = redis.createClient( redisConfig.credentials.port, redisConfig.credentials.hostname );
+client = redis.createClient(env['DOTCLOUD_DATA_REDIS_PORT'], env['DOTCLOUD_DATA_REDIS_HOST']);
 
-// var redisClient = redis.createClient(redisConfig.port, redisConfig.hostname);
-// var redisPublisher = redis.createClient(redisConfig.port, redisConfig.hostname);
-// if(redisConfig.password) {
-//	 redisClient.auth(redisConfig.password);
-//	 redisPublisher.auth(redisConfig.password);
-// }
-
-if (redisConfig.credentials.password) {
-    redisClient.auth(redisConfig.credentials.password, function(err, res) {
+if (env['DOTCLOUD_DATA_REDIS_LOGIN']) {
+    client.auth(env['DOTCLOUD_DATA_REDIS_PASSWORD'], function(err, res) {
         console.log("Authenticating to redis!");
     });
 }
@@ -138,13 +63,11 @@ process.on('SIGTERM', function () {
     process.exit(0);
 });
 
-
-// var appPort = cf.getAppPort() || 9000;
-var appPort = cf.port || 9000;
+var appPort = env['PORT_NODEJS'] || 9000;
 console.log("Express listening on port: " + appPort);
 app.listen(appPort);
 
-redisClient.on("error", function (err) {
+client.on("error", function (err) {
     console.log("Error " + err);
 });
 
@@ -172,6 +95,18 @@ function removeParameters(url, parameters) {
 
   return url;
 }
+
+//function removeVariableFromURL(url_string, variable_name) {
+//    var URL = String(url_string);
+//    var regex = new RegExp( "\\?" + variable_name + "=[^&]*&?", "gi");
+//    URL = URL.replace(regex,'?');
+//    regex = new RegExp( "\\&" + variable_name + "=[^&]*&?", "gi");
+//    URL = URL.replace(regex,'&');
+//    URL = URL.replace(/(\?|&)$/,'');
+//    regex = null;
+//    return URL;
+//  }
+
 
 function getParameterByName( url, name ) {
     name = name.replace(/[\[]/,"\\\[").replace(/[\]]/,"\\\]");
@@ -211,32 +146,6 @@ app.get('/index.html', function(req, res) {
     res.sendfile(__dirname + '/www/index.html');
 });
 
-app.post('/register', function(req, res) {
-    mysqlClient.query(
-        'insert into registration (firstname, lastname, email) values (?, ?, ?)',
-        [ req.body.firstname, req.body.lastname, req.body.email ],
-        function selectCb(err, results, fields) {
-            if (err) {
-                var errorMessage = err.name + ": " + err.message;
-                console.log(errorMessage);
-                res.send(errorMessage, 500);
-            }
-            else {
-                res.send('success');
-            }
-        });
-});
-
-//app.post('/load-redis-data', function(req, res) {
-//    console.log('Processing JSON request');
-//    _.each(req.body, function(entry) {
-//        console.log("Inserting Entry: [" + entry.key + ", " + entry.value + "]");
-//        redisClient.set(entry.key, entry.value);
-//    });
-//    res.header('Content-Type', 'application/json');
-//    res.send({ count: req.body.length });
-//});
-
 app.all('/*', function(req, res) {
     try {
 
@@ -267,7 +176,7 @@ app.all('/*', function(req, res) {
             processRequest(options);
         }
         else {
-            redisClient.get(cacheKey, function (err, data) {
+            client.get(cacheKey, function (err, data) {
                 var options = {
                     req: req,
                     res: res,
@@ -281,19 +190,14 @@ app.all('/*', function(req, res) {
                 processRequest(options);
             });
         }
-    }
-    catch(err) {
-        errorMessage = err.name + ": " + err.message;
-        console.log(errorMessage);
-        res.send(errorMessage, 500);
-    }
+    } catch(err) { res.send(e.name + ": " + e.message, 500); }
 });
 
 function processRequest(options) {
     try {
         if (!options.forceNoCache && options.clearCache) {
             console.log("[" + options.url + "] Clearing cache for key: '" + options.cacheKey + "'");
-             redisClient.del(options.cacheKey);
+             client.del(options.cacheKey);
          }
 
         if (!options.err && options.cachedData) {
@@ -319,14 +223,14 @@ function processRequest(options) {
                     console.log("[" + options.url + "] Fetched Response from url '" + targetUrl + "': " + jsonData);
                     sendJsonResponse(options, jsonData);
                     if (!options.forceNoCache) {
-                        redisClient.set(options.cacheKey, jsonData);
+                        client.set(options.cacheKey, jsonData);
 //                        client.expire(options.cacheKey, 60 * 60);
                     }
                 }
             });
         }
     } catch(err) {
-        var errorMessage = err.name + ": " + err.message;
+        var errorMessage = e.name + ": " + e.message;
         console.log(errorMessage);
         options.res.send(errorMessage, 500);
     }

@@ -8,17 +8,16 @@
     },
     "keywords": ["node.js", "devoxx", "rest", "api", "proxy", "restler", "express"],
     "repository": "git@bitbucket.org:akinsella/xebia-devoxx-2012-node-js-proxy.git",
-    "main": "app",
-    "bin": {
-        "express": "./bin/express"
-    },
+    "main": "app-cloudfoundry",
     "contributors": [
         { "name":"Alexis Kinsella", "email":"akinsella@xebia.fr" }
     ],
     "dependencies": {
         "express": "*",
         "restler": "*",
-        "redis": "*"
+        "redis": "*",
+        "mysql": "*",
+        "underscore": "*"
     },
     "devDependencies": {
     },

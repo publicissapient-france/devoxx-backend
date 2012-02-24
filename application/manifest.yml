@@ -1,0 +1,18 @@
+--- 
+applications: 
+  .: 
+    name: devoxx-xebia
+    instances: 1
+    framework: 
+      name: node
+      info: 
+        exec: 
+        description: Node.js Application
+        mem: 64M
+    url: ${name}.${target-base}
+    services: 
+      devoxx-xebia-redis: 
+        type: redis
+      devoxx-xebia-mysql: 
+        type: mysql
+    mem: 64M

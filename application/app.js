@@ -312,7 +312,12 @@ function processRequest(options) {
 
                     console.log("[" + options.url + "] Content-Type is not json or javascript: Not caching data and returning response directly");
                     options.res.header('Content-Type', contentType);
-                    options.res.send(data);
+                    if (data.indexOf("Entity Not Found") >= 0) {
+                        sendJsonResponse(options, '{statusCode: 404, message: "Entity Not Found"}')
+                    }
+                    else {
+                        options.res.send(data);
+                    }
                 }
                 else {
                     var jsonData =  JSON.stringify(data);

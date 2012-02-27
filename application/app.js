@@ -1,3 +1,4 @@
+var request = require('request');
 var fs = require('fs');
 var express = require('express');
 var restler = require('restler');
@@ -237,6 +238,102 @@ app.post('/register', function(req, res) {
 //    res.send({ count: req.body.length });
 //});
 
+
+
+
+app.get('/speaker/:id', function(req, res) {
+
+    var cacheKey = "/rest/v1/events/speakers/" + req.params.id;
+    var urlToFetch = cacheKey + getParameterByName(req.url, '_');
+
+    console.log("[" + cacheKey + "] Cache Key: " + cacheKey);
+    console.log("[" + cacheKey + "] Checking if data is in cache");
+
+    var clearCache = getParameterByName(req.url, 'clear') === 'true';
+    var forceNoCache = getParameterByName(req.url, 'cache') === 'false';
+
+    if (forceNoCache) {
+        var options = {
+            speakerId: req.params.id,
+            req: req,
+            res: res,
+            url: urlToFetch,
+            cacheKey: cacheKey,
+            forceNoCache: forceNoCache,
+            clearCache: clearCache
+        };
+        processSpeakerImage(options);
+    }
+    else {
+        redisClient.get(cacheKey, function (err, data) {
+            var options = {
+                speakerId: req.params.id,
+                req: req,
+                res: res,
+                cachedData: data,
+                err: err,
+                url: urlToFetch,
+                cacheKey: cacheKey,
+                forceNoCache: forceNoCache,
+                clearCache: clearCache
+            };
+            processSpeakerImage(options);
+        });
+    }
+
+});
+
+function processSpeakerImage(options) {
+    try {
+        if (!options.forceNoCache && options.clearCache) {
+            console.log("[" + options.url + "] Clearing cache for key: '" + options.cacheKey + "'");
+             redisClient.del(options.cacheKey);
+         }
+
+        if (!options.err && options.cachedData) {
+            console.log("[" + options.url + "] A reply is in cache key: '" + options.cacheKey + "', returning immediatly the reply");
+            var imageURI = JSON.parse(options.cachedData).imageURI;
+            request({ 'method':'GET', 'uri': imageURI }, function(err, response,body) {
+                var contentType = response.header("Content-Type");
+                options.res.redirect( (!err && contentType.indexOf("image") !== -1 ) ? imageURI : "http://cfp.devoxx.com/img/thumbnail.gif");
+            });
+        }
+        else {
+            console.log("[" + options.url + "] No cached reply found for key: '" + options.cacheKey + "'");
+            var targetUrl = 'https://cfp.devoxx.com/rest/v1/events/speakers/' + options.speakerId;
+            console.log("[" + options.url + "] Fetching data from url: '" + targetUrl + "'");
+            restler.get(targetUrl).on('complete', function (data, response) {
+                var contentType = response.header("Content-Type");
+                console.log("[" + options.url + "] Http Response - Content-Type: " + contentType);
+                if ( contentType.indexOf('json') === -1 &&
+                     contentType.indexOf('script') === -1 ) {
+
+                    console.log("[" + options.url + "] Content-Type is not json or javascript: Not caching data and returning response directly");
+                    options.res.send("Not Found", 404);
+                }
+                else {
+                    var jsonData =  JSON.stringify(data);
+                    console.log("[" + options.url + "] Fetched Response from url '" + targetUrl + "': " + jsonData);
+                    var imageURI = data.imageURI;
+                    request({ 'method':'GET', 'uri': imageURI }, function(err, response,body) {
+                        var contentType = response.header("Content-Type");
+                        options.res.redirect( (!err && contentType.indexOf("image") !== -1 ) ? imageURI : "http://cfp.devoxx.com/img/thumbnail.gif");
+                    });
+
+                    if (!options.forceNoCache) {
+                        redisClient.set(options.cacheKey, jsonData);
+                    }
+                }
+            });
+        }
+    } catch(err) {
+        var errorMessage = err.name + ": " + err.message;
+        console.log(errorMessage);
+        options.res.send(errorMessage, 500);
+    }
+}
+
+
 app.all('/*', function(req, res) {
     try {
 
@@ -259,7 +356,7 @@ app.all('/*', function(req, res) {
             var options = {
                 req: req,
                 res: res,
-                url:urlToFetch,
+                url: urlToFetch,
                 cacheKey: cacheKey,
                 forceNoCache: forceNoCache,
                 clearCache: clearCache
@@ -273,7 +370,7 @@ app.all('/*', function(req, res) {
                     res: res,
                     cachedData: data,
                     err: err,
-                    url:urlToFetch,
+                    url: urlToFetch,
                     cacheKey: cacheKey,
                     forceNoCache: forceNoCache,
                     clearCache: clearCache
@@ -313,7 +410,7 @@ function processRequest(options) {
                     console.log("[" + options.url + "] Content-Type is not json or javascript: Not caching data and returning response directly");
                     options.res.header('Content-Type', contentType);
                     if (data.indexOf("Entity Not Found") >= 0) {
-                        sendJsonResponse(options, '{statusCode: 404, message: "Entity Not Found"}')
+                        sendJsonResponse(options, '{"statusCode": 404, "message": "Entity Not Found"}');
                     }
                     else {
                         options.res.send(data);

@@ -17,7 +17,8 @@
         "restler": "*",
         "redis": "*",
         "mysql": "*",
-        "underscore": "*"
+        "underscore": "*",
+        "request": "*"
     },
     "devDependencies": {
     },

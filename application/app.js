@@ -11,6 +11,8 @@ var cf = require("cloudfoundry");
 
 var _ = underscore._;
 
+var imageCache = {};
+
 if(!cf.app) {
 
    var LOCAL_CF_CONFIG = {
@@ -243,7 +245,7 @@ app.post('/register', function(req, res) {
 
 app.get('/speaker/:id', function(req, res) {
 
-    var cacheKey = "/rest/v1/events/speakers/" + req.params.id;
+    var cacheKey = "/data/image/speakers/" + req.params.id;
     var urlToFetch = cacheKey + getParameterByName(req.url, '_');
 
     console.log("[" + cacheKey + "] Cache Key: " + cacheKey);
@@ -252,34 +254,20 @@ app.get('/speaker/:id', function(req, res) {
     var clearCache = getParameterByName(req.url, 'clear') === 'true';
     var forceNoCache = getParameterByName(req.url, 'cache') === 'false';
 
-    if (forceNoCache) {
-        var options = {
-            speakerId: req.params.id,
-            req: req,
-            res: res,
-            url: urlToFetch,
-            cacheKey: cacheKey,
-            forceNoCache: forceNoCache,
-            clearCache: clearCache
-        };
-        processSpeakerImage(options);
+    var options = {
+        speakerId: req.params.id,
+        req: req,
+        res: res,
+        url: urlToFetch,
+        cacheKey: cacheKey,
+        forceNoCache: forceNoCache,
+        clearCache: clearCache
+    };
+    if (!forceNoCache) {
+        options.cachedData = imageCache[cacheKey];
     }
-    else {
-        redisClient.get(cacheKey, function (err, data) {
-            var options = {
-                speakerId: req.params.id,
-                req: req,
-                res: res,
-                cachedData: data,
-                err: err,
-                url: urlToFetch,
-                cacheKey: cacheKey,
-                forceNoCache: forceNoCache,
-                clearCache: clearCache
-            };
-            processSpeakerImage(options);
-        });
-    }
+    processSpeakerImage( options );
+
 
 });
 
@@ -287,16 +275,11 @@ function processSpeakerImage(options) {
     try {
         if (!options.forceNoCache && options.clearCache) {
             console.log("[" + options.url + "] Clearing cache for key: '" + options.cacheKey + "'");
-             redisClient.del(options.cacheKey);
+            imageCache[options.cacheKey] = undefined;
          }
 
-        if (!options.err && options.cachedData) {
-            console.log("[" + options.url + "] A reply is in cache key: '" + options.cacheKey + "', returning immediatly the reply");
-            var imageURI = JSON.parse(options.cachedData).imageURI;
-            request({ 'method':'GET', 'uri': imageURI }, function(err, response,body) {
-                var contentType = response.header("Content-Type");
-                options.res.redirect( (!err && contentType.indexOf("image") !== -1 ) ? imageURI : "http://cfp.devoxx.com/img/thumbnail.gif");
-            });
+        if (options.cachedData) {
+            options.res.redirect(options.cachedData);
         }
         else {
             console.log("[" + options.url + "] No cached reply found for key: '" + options.cacheKey + "'");
@@ -312,16 +295,24 @@ function processSpeakerImage(options) {
                     options.res.send("Not Found", 404);
                 }
                 else {
-                    var jsonData =  JSON.stringify(data);
-                    console.log("[" + options.url + "] Fetched Response from url '" + targetUrl + "': " + jsonData);
-                    var imageURI = data.imageURI;
-                    request({ 'method':'GET', 'uri': imageURI }, function(err, response,body) {
-                        var contentType = response.header("Content-Type");
-                        options.res.redirect( (!err && contentType.indexOf("image") !== -1 ) ? imageURI : "http://cfp.devoxx.com/img/thumbnail.gif");
-                    });
+                    if (data.imageURI === "http://cfp.devoxx.com/img/thumbnail.gif" || data.imageURI === "https://cfp.devoxx.com/img/thumbnail.gif") {
+                        options.res.redirect("https://cfp.devoxx.com/img/thumbnail.gif");
+                    }
+                    else {
+                        var imageURI =  data.imageURI;
+                        console.log("[" + options.url + "] Fetched Response from url '" + targetUrl + "': " + imageURI);
 
-                    if (!options.forceNoCache) {
-                        redisClient.set(options.cacheKey, jsonData);
+                        request(imageURI, function(err, response, body) {
+                            if (response.statusCode !== 200 || response.header("Content-Type").indexOf("image") === -1) {
+                                options.res.redirect("https://cfp.devoxx.com/img/thumbnail.gif");
+                            }
+                            else {
+                                options.res.redirect(imageURI);
+                                if (!options.forceNoCache) {
+                                    imageCache[options.cacheKey] = imageURI;
+                                }
+                            }
+                        });
                     }
                 }
             });

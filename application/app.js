@@ -9,7 +9,7 @@ var mysql = require('mysql');
 var underscore = require("underscore");
 var cf = require("cloudfoundry");
 
-var PRE_CACHE_SPEAKERS = true;
+var PRE_CACHE_SPEAKERS = false;
 
 var _ = underscore._;
 
@@ -259,6 +259,8 @@ app.get('/speaker/:id', function(req, res) {
     var options = {
         speakerId: req.params.id,
         cacheKey: cacheKey,
+        req: req,
+        res: res,
         forceNoCache: forceNoCache,
         clearCache: clearCache
     };
@@ -272,7 +274,7 @@ app.get('/speaker/:id', function(req, res) {
         options.res.redirect(data.imageURI);
 
         if (!options.forceNoCache) {
-            imageUriCache[options.cacheKey] = data.imageURI;
+            imageUriCache[options.cacheKey] = datagit .imageURI;
         }
     } );
 

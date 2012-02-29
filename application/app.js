@@ -9,7 +9,7 @@ var mysql = require('mysql');
 var underscore = require("underscore");
 var cf = require("cloudfoundry");
 
-var PRE_CACHE_SPEAKERS = true;
+var PRE_CACHE_SPEAKERS = false;
 
 var _ = underscore._;
 

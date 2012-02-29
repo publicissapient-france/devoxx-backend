@@ -274,7 +274,7 @@ app.get('/speaker/:id', function(req, res) {
         options.res.redirect(data.imageURI);
 
         if (!options.forceNoCache) {
-            imageUriCache[options.cacheKey] = datagit .imageURI;
+            imageUriCache[options.cacheKey] = data.imageURI;
         }
     } );
 

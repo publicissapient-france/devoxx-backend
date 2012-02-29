@@ -9,7 +9,7 @@ var mysql = require('mysql');
 var underscore = require("underscore");
 var cf = require("cloudfoundry");
 
-var PRE_CACHE_SPEAKERS = false;
+var PRE_CACHE_SPEAKERS = true;
 
 var _ = underscore._;
 
@@ -303,7 +303,7 @@ function processSpeakerImage(options, callback) {
                     else {
                         console.log("[" + options.url + "] Fetched Response from url '" + targetUrl + "': " + data.imageURI);
                         request(data.imageURI, function(err, response, body) {
-                            var imageUriValid = response.statusCode !== 200 || response.header("Content-Type").indexOf("image") === -1;
+                            var imageUriValid = response.statusCode === 200 && response.header("Content-Type").indexOf("image") !== -1;
                             callback({ imageURI: imageUriValid ? data.imageURI : "https://cfp.devoxx.com/img/thumbnail.gif" });
                         });
                     }

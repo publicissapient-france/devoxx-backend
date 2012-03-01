@@ -243,7 +243,15 @@ app.post('/register', function(req, res) {
 //});
 
 
+app.get('/xebia/program', function(req, res) {
 
+    request("http://devoxx.helyx.org/data/xebia-program.json", function(err, response, body) {
+            var callback = getParameterByName(req.url, 'callback');
+            res.header('Content-Type', 'application/javascript');
+            res.send(callback + "(" + body + ");");
+     });
+
+});
 
 app.get('/speaker/:id', function(req, res) {
 

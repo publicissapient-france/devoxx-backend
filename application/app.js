@@ -10,6 +10,7 @@ var underscore = require("underscore");
 var cf = require("cloudfoundry");
 
 var PRE_CACHE_SPEAKERS = false;
+var OFFLINE = false;
 
 var _ = underscore._;
 
@@ -86,6 +87,14 @@ var mysqlConfig = cf.services["mysql-5.1"][0];
 console.log('Application Name: ' + cf.app.name);
 console.log('Env: ' + JSON.stringify(cf));
 
+var allowCrossDomain = function(req, res, next) {
+    res.header('Access-Control-Allow-Origin', "*");
+    res.header('Access-Control-Allow-Methods', 'GET,POST');
+    res.header('Access-Control-Allow-Headers', 'Content-Type');
+
+    next();
+};
+
 app.configure(function() {
     app.use(express.static(__dirname + '/public'));
     app.use(express.logger());
@@ -94,6 +103,7 @@ app.configure(function() {
     app.use(express.session({secret: cf.app.instance_id}));
     app.use(express.logger());
     app.use(express.methodOverride());
+    app.use(allowCrossDomain);
     app.set('running in cloud', cf.cloud);
 
     app.use(app.router);
@@ -123,13 +133,6 @@ console.log('Env: ' + JSON.stringify(mysqlOptions));
 redis.debug_mode = false;
 
 var redisClient = redis.createClient( redisConfig.credentials.port, redisConfig.credentials.hostname );
-
-// var redisClient = redis.createClient(redisConfig.port, redisConfig.hostname);
-// var redisPublisher = redis.createClient(redisConfig.port, redisConfig.hostname);
-// if(redisConfig.password) {
-//	 redisClient.auth(redisConfig.password);
-//	 redisPublisher.auth(redisConfig.password);
-// }
 
 if (redisConfig.credentials.password) {
     redisClient.auth(redisConfig.credentials.password, function(err, res) {
@@ -218,8 +221,14 @@ app.get('/index.html', function(req, res) {
 
 app.post('/register', function(req, res) {
     mysqlClient.query(
-        'insert into registration (firstname, lastname, email) values (?, ?, ?)',
-        [ req.body.firstname, req.body.lastname, req.body.email ],
+        'insert into registration (firstname, lastname, email, pass_id, comment) values (?, ?, ?, ?, ?)',
+        [
+            req.body.firstname || "",
+            req.body.lastname || "",
+            req.body.email || "",
+            req.body.pass_id || "",
+            req.body.comment || ""
+        ],
         function selectCb(err, results, fields) {
             if (err) {
                 var errorMessage = err.name + ": " + err.message;
@@ -232,6 +241,10 @@ app.post('/register', function(req, res) {
         });
 });
 
+app.all('/register', function(req, res) {
+    res.send("Only HTTP POST requests accepted", 401);
+});
+
 //app.post('/load-redis-data', function(req, res) {
 //    console.log('Processing JSON request');
 //    _.each(req.body, function(entry) {
@@ -241,6 +254,114 @@ app.post('/register', function(req, res) {
 //    res.header('Content-Type', 'application/json');
 //    res.send({ count: req.body.length });
 //});
+
+app.get('/redis-nuke', function(req, res) {
+    console.log('Removing all keys');
+    redisClient.keys("*", function (err, data) {
+         if (!err && data) {
+             res.send(data);
+             redisClient.del(data, function (dataDel) {
+                 res.send("Done: " + dataDel);
+             } );
+         }
+    });
+});
+
+if (OFFLINE) {
+
+    app.get('/twitter/*', function (req, res) {
+
+        request("http://localhost/devoxx-2012/data/twitter/user_timeline.json", function(err, response, body) {
+                var callback = getParameterByName(req.url, 'callback');
+                res.header('Content-Type', 'application/javascript');
+                res.send(callback + "(" + body + ");");
+         });
+
+    });
+
+    app.get('/rest/v1/events/6/schedule/day/:id', function (req, res) {
+        var dayId = Number(req.params.id);
+        if (_([1, 2, 3]).contains(dayId)) {
+            request("http://localhost/devoxx-2012/data/schedule/day/" + req.params.id + ".json", function(err, response, body) {
+                    var callback = getParameterByName(req.url, 'callback');
+                    res.header('Content-Type', 'application/javascript');
+                    res.send(callback + "(" + body + ");");
+             });
+        }
+        else {
+            res.send("Not Found - Bad day id: " + dayId, 404);
+        }
+
+    });
+
+    app.get('/rest/v1/events/6/schedule/rooms', function (req, res) {
+
+        request("http://localhost/devoxx-2012/data/schedule/rooms.json", function(err, response, body) {
+                var callback = getParameterByName(req.url, 'callback');
+                res.header('Content-Type', 'application/javascript');
+                res.send(callback + "(" + body + ");");
+         });
+
+    });
+
+    app.get('/rest/v1/events/6/schedule', function (req, res) {
+
+        request("http://localhost/devoxx-2012/data/schedule/schedule.json", function(err, response, body) {
+                var callback = getParameterByName(req.url, 'callback');
+                res.header('Content-Type', 'application/javascript');
+                res.send(callback + "(" + body + ");");
+         });
+
+    });
+
+    app.get('/speaker/*', function (req, res) {
+
+        res.header('Content-Type', 'image/png');
+        res.sendfile(__dirname + '/public/images/speaker/default.png');
+
+    });
+
+    app.get('/rest/v1/events/6/speakers', function (req, res) {
+
+        request("http://localhost/devoxx-2012/data/speaker/speakers.json", function(err, response, body) {
+                var callback = getParameterByName(req.url, 'callback');
+                res.header('Content-Type', 'application/javascript');
+                res.send(callback + "(" + body + ");");
+         });
+
+    });
+
+    app.get('/rest/v1/events/speakers/*', function (req, res) {
+
+        request("http://localhost/devoxx-2012/data/speaker/speaker.json", function(err, response, body) {
+                var callback = getParameterByName(req.url, 'callback');
+                res.header('Content-Type', 'application/javascript');
+                res.send(callback + "(" + body + ");");
+         });
+
+    });
+
+    app.get('/rest/v1/events/4/presentations', function (req, res) {
+
+        request("http://localhost/devoxx-2012/data/presentations/presentations.json", function(err, response, body) {
+                var callback = getParameterByName(req.url, 'callback');
+                res.header('Content-Type', 'application/javascript');
+                res.send(callback + "(" + body + ");");
+         });
+
+    });
+
+     app.get('/rest/v1/events/presentations/*', function (req, res) {
+
+         request("http://localhost/devoxx-2012/data/presentation/presentation.json", function(err, response, body) {
+                 var callback = getParameterByName(req.url, 'callback');
+                 res.header('Content-Type', 'application/javascript');
+                 res.send(callback + "(" + body + ");");
+          });
+
+     });
+
+}
 
 
 app.get('/xebia/program', function(req, res) {

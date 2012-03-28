@@ -11,6 +11,8 @@ var cf = require("cloudfoundry");
 
 var PRE_CACHE_SPEAKERS = false;
 var OFFLINE = false;
+var EXPIRE_CACHE = true;
+var USE_CACHE = true;
 
 var _ = underscore._;
 
@@ -146,7 +148,6 @@ process.on('SIGTERM', function () {
     process.exit(0);
 });
 
-
 // var appPort = cf.getAppPort() || 9000;
 var appPort = cf.port || 9000;
 console.log("Express listening on port: " + appPort);
@@ -208,6 +209,30 @@ function sendJsonResponse(options, data) {
 
     console.log("[" + options.url + "] Response sent: " + response);
     options.res.send(response);
+}
+
+function getContentType(response) {
+    return response.header("Content-Type");
+}
+
+function isContentTypeJsonOrScript(contentType) {
+    return contentType.indexOf('json') >= 0 || contentType.indexOf('script') >= 0;
+}
+
+function getCacheKey(req) {
+    return removeParameters(req.url, ['callback', '_']);
+}
+
+function getUrlToFetch(req) {
+    return removeParameters(req.url, ['callback']);
+}
+
+function getIfUseCache(req) {
+    return getParameterByName(req.url, 'cache') === 'false';
+}
+
+function useCache(options) {
+    return !options.forceNoCache && USE_CACHE;
 }
 
 app.get('/', function(req, res) {
@@ -363,7 +388,6 @@ if (OFFLINE) {
 
 }
 
-
 app.get('/xebia/program', function(req, res) {
 
     request("http://devoxx.helyx.org/data/xebia-program.json", function(err, response, body) {
@@ -377,12 +401,10 @@ app.get('/xebia/program', function(req, res) {
 app.get('/speaker/:id', function(req, res) {
 
     var cacheKey = "/data/image/speakers/" + req.params.id;
-    var urlToFetch = cacheKey + getParameterByName(req.url, '_');
 
     console.log("[" + cacheKey + "] Cache Key: " + cacheKey);
     console.log("[" + cacheKey + "] Checking if data is in cache");
 
-    var clearCache = getParameterByName(req.url, 'clear') === 'true';
     var forceNoCache = getParameterByName(req.url, 'cache') === 'false';
 
     var options = {
@@ -390,19 +412,14 @@ app.get('/speaker/:id', function(req, res) {
         cacheKey: cacheKey,
         req: req,
         res: res,
-        forceNoCache: forceNoCache,
-        clearCache: clearCache
+        forceNoCache: forceNoCache
     };
-
-    if (options.clearCache) {
-        console.log("[" + options.url + "] Clearing cache for key: '" + options.cacheKey + "'");
-        imageUriCache[options.cacheKey] = undefined;
-     }
 
     processSpeakerImage( options, function(data) {
         options.res.redirect(data.imageURI);
 
-        if (!options.forceNoCache) {
+        if (useCache(options)) {
+            console.log("Adding image '" + data.imageURI + "' for speaker: '" + data.id + "'");
             imageUriCache[options.cacheKey] = data.imageURI;
         }
     } );
@@ -411,7 +428,7 @@ app.get('/speaker/:id', function(req, res) {
 
 function processSpeakerImage(options, callback) {
     try {
-        if (!options.forceNoCache && imageUriCache[options.cacheKey]) {
+        if (useCache(options) && imageUriCache[options.cacheKey]) {
             callback({ imageURI: imageUriCache[options.cacheKey] });
         }
         else {
@@ -426,7 +443,7 @@ function processSpeakerImage(options, callback) {
                     callback({ imageURI: "https://cfp.devoxx.com/img/thumbnail.gif" });
                 }
                 else {
-                    if ( data.imageURI === "http://cfp.devoxx.com/img/thumbnail.gif" || data.imageURI === "https://cfp.devoxx.com/img/thumbnail.gif" ) {
+                    if ( data.imageURI && data.imageURI.indexOf(".devoxx.com/img/thumbnail.gif") >= 0 ) {
                         callback({ imageURI: "https://cfp.devoxx.com/img/thumbnail.gif" });
                     }
                     else {
@@ -446,107 +463,135 @@ function processSpeakerImage(options, callback) {
     }
 }
 
+app.get('/rest/v1/events/:eventId/tracks/:trackId', function (req, res) {
+    var eventId = req.params.eventId;
+    console.log("EventId: " + eventId);
+    var trackId = req.params.trackId;
+    console.log("TrackId: " + trackId);
+    var tracksUrl = "/rest/v1/events/" + eventId + "/tracks";
+    var presentationsUrl = "/rest/v1/events/" + eventId + "/presentations";
+    console.log("Tracks Url: " + presentationsUrl);
 
-app.all('/*', function(req, res) {
-    try {
+    getDevoxxData({
+        req: req,
+        res: res,
+        url: tracksUrl,
+        cacheKey: tracksUrl,
+        forceNoCache: getIfUseCache(req),
+        callback: onTracksDataLoaded,
+        trackId: trackId,
+        eventId: eventId
+    });
 
-        if (req.method !== 'GET') {
-            var errorMessage = "Request method not supported: '" + req.method + "'";
-            console.log(errorMessage);
-            res.send(errorMessage, 501);
-            return;
-        }
-
-        var cacheKey = removeParameters(req.url, ['callback', '_']);
-        var urlToFetch = removeParameters(req.url, ['callback']);
-
-        console.log("[" + cacheKey + "] Cache Key: " + cacheKey);
-        console.log("[" + cacheKey + "] Checking if data is in cache");
-
-        var clearCache = getParameterByName(req.url, 'clear') === 'true';
-        var forceNoCache = getParameterByName(req.url, 'cache') === 'false';
-        if (forceNoCache) {
-            var options = {
-                req: req,
-                res: res,
-                url: urlToFetch,
-                cacheKey: cacheKey,
-                forceNoCache: forceNoCache,
-                clearCache: clearCache
-            };
-            processRequest(options);
+    function onPresentationsLoaded(statusCode, statusMessage, presentations, options) {
+        if (statusCode !== 200) {
+            responseData(statusCode, statusMessage, presentations, options);
         }
         else {
-            redisClient.get(cacheKey, function (err, data) {
-                var options = {
-                    req: req,
-                    res: res,
-                    cachedData: data,
-                    err: err,
-                    url: urlToFetch,
-                    cacheKey: cacheKey,
-                    forceNoCache: forceNoCache,
-                    clearCache: clearCache
-                };
-                processRequest(options);
+            var track = _(JSON.parse(options.tracks)).find(function(track) {
+                return track.id === Number(trackId);
+            });
+            var trackPresentations = _(JSON.parse(presentations)).filter(function(presentation) { return presentation.track === track.name; });
+            responseData(statusCode, statusMessage, trackPresentations, options)
+        }
+    }
+
+    function onTracksDataLoaded(statusCode, statusMessage, tracks, options) {
+        if (statusCode !== 200) {
+            responseData(statusCode, statusMessage, tracks, options);
+        }
+        else {
+            getDevoxxData({
+                req: req,
+                res: res,
+                url: presentationsUrl,
+                cacheKey: presentationsUrl,
+                forceNoCache: getIfUseCache(req),
+                callback: onPresentationsLoaded,
+                tracks: tracks
             });
         }
     }
-    catch(err) {
-        errorMessage = err.name + ": " + err.message;
-        console.log(errorMessage);
-        res.send(errorMessage, 500);
-    }
+
 });
 
-function processRequest(options) {
-    try {
-        if (!options.forceNoCache && options.clearCache) {
-            console.log("[" + options.url + "] Clearing cache for key: '" + options.cacheKey + "'");
-             redisClient.del(options.cacheKey);
-         }
+app.get('/*', function(req, res) {
+    getDevoxxData({
+        req: req,
+        res: res,
+        url: getUrlToFetch(req),
+        cacheKey: getCacheKey(req),
+        forceNoCache: getIfUseCache(req),
+        callback: responseData
+    });
+});
 
-        if (!options.err && options.cachedData) {
-            console.log("[" + options.url + "] A reply is in cache key: '" + options.cacheKey + "', returning immediatly the reply");
-            sendJsonResponse(options, options.cachedData);
+function responseData(statusCode, statusMessage, data, options) {
+    if (statusCode === 200) {
+        sendJsonResponse(options, data);
+    }
+    else {
+        console.log("Status code: " + statusCode + ", message: " + statusMessage);
+        options.res.send(statusMessage, statusCode);
+    }
+}
+
+function getDevoxxData(options) {
+    try {
+        if (!useCache(options)) {
+            fetchDataFromDevoxxUrl(options);
         }
         else {
-            console.log("[" + options.url + "] No cached reply found for key: '" + options.cacheKey + "'");
-            var targetUrl = 'https://cfp.devoxx.com' + options.cacheKey;
-            console.log("[" + options.url + "] Fetching data from url: '" + targetUrl + "'");
-            restler.get(targetUrl).on('complete', function (data, response) {
-                var contentType = response.header("Content-Type");
-                console.log("[" + options.url + "] Http Response - Content-Type: " + contentType);
-                if ( contentType.indexOf('json') === -1 &&
-                     contentType.indexOf('script') === -1 ) {
-
-                    console.log("[" + options.url + "] Content-Type is not json or javascript: Not caching data and returning response directly");
-                    options.res.header('Content-Type', contentType);
-                    if (data.indexOf("Entity Not Found") >= 0) {
-                        sendJsonResponse(options, '{"statusCode": 404, "message": "Entity Not Found"}');
-                    }
-                    else {
-                        options.res.send(data);
-                    }
+            console.log("[" + options.cacheKey + "] Cache Key is: " + options.cacheKey);
+            console.log("Checking if data for cache key [" + options.cacheKey + "] is in cache");
+            redisClient.get(options.cacheKey, function (err, data) {
+                if (!err && data) {
+                    console.log("[" + options.url + "] A reply is in cache key: '" + options.cacheKey + "', returning immediatly the reply");
+                    options.callback(200, "", data, options);
                 }
                 else {
-                    var jsonData =  JSON.stringify(data);
-                    console.log("[" + options.url + "] Fetched Response from url '" + targetUrl + "': " + jsonData);
-                    sendJsonResponse(options, jsonData);
-                    if (!options.forceNoCache) {
-                        redisClient.set(options.cacheKey, jsonData);
-//                        client.expire(options.cacheKey, 60 * 60);
-                    }
+                    console.log("[" + options.url + "] No cached reply found for key: '" + options.cacheKey + "'");
+                    fetchDataFromDevoxxUrl(options);
                 }
             });
         }
     } catch(err) {
         var errorMessage = err.name + ": " + err.message;
-        console.log(errorMessage);
-        options.res.send(errorMessage, 500);
+        options.callback(500, errorMessage, undefined, options);
     }
 }
 
+function fetchDataFromDevoxxUrl(options) {
+    var targetUrl = 'https://cfp.devoxx.com' + options.cacheKey;
+    console.log("[" + options.url + "] Fetching data from url: '" + targetUrl + "'");
+    restler.get(targetUrl).on('complete', function (data, response) {
+        var contentType = getContentType(response);
+        console.log("[" + options.url + "] Http Response - Content-Type: " + contentType);
+        if ( !isContentTypeJsonOrScript(contentType) ) {
+            console.log("[" + options.url + "] Content-Type is not json or javascript: Not caching data and returning response directly");
+            options.res.header('Content-Type', contentType);
+            if (data.indexOf("Entity Not Found") >= 0) {
+                var dataToAnswer = '{"statusCode": 404, "message": "Entity Not Found"}';
+                options.callback(200, "", dataToAnswer, options);
+            }
+            else {
+                options.callback(200, "", data, options);
+            }
+        }
+        else {
+            var jsonData =  JSON.stringify(data);
+            console.log("[" + options.url + "] Fetched Response from url '" + targetUrl + "': " + jsonData);
+            options.callback(200, "", jsonData, options);
+            if (useCache(options)) {
+                redisClient.set(options.cacheKey, jsonData);
+                if (EXPIRE_CACHE) {
+                    redisClient.expire(options.cacheKey, 60 * 60);
+                }
+            }
+        }
+    });
+
+}
 
 function initSpeakerCacheData() {
     console.log("Trying to init speaker image URI cache");

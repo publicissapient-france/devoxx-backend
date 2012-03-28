@@ -492,7 +492,7 @@ app.get('/rest/v1/events/:eventId/tracks/:trackId', function (req, res) {
                 return track.id === Number(trackId);
             });
             var trackPresentations = _(JSON.parse(presentations)).filter(function(presentation) { return presentation.track === track.name; });
-            responseData(statusCode, statusMessage, trackPresentations, options)
+            responseData(statusCode, statusMessage, JSON.stringify(trackPresentations), options)
         }
     }
 

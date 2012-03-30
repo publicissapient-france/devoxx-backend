@@ -470,7 +470,7 @@ app.get('/rest/v1/events/:eventId/tracks/:trackId', function (req, res) {
     console.log("TrackId: " + trackId);
     var tracksUrl = "/rest/v1/events/" + eventId + "/tracks";
     var presentationsUrl = "/rest/v1/events/" + eventId + "/presentations";
-    console.log("Tracks Url: " + presentationsUrl);
+    console.log("Presentations Url: " + presentationsUrl);
 
     getDevoxxData({
         req: req,
@@ -509,6 +509,58 @@ app.get('/rest/v1/events/:eventId/tracks/:trackId', function (req, res) {
                 forceNoCache: getIfUseCache(req),
                 callback: onPresentationsLoaded,
                 tracks: tracks
+            });
+        }
+    }
+
+});
+
+app.get('/rest/v1/events/:eventId/rooms/:roomId', function (req, res) {
+    var eventId = req.params.eventId;
+    console.log("EventId: " + eventId);
+    var roomId = req.params.roomId;
+    console.log("roomId: " + roomId);
+    var roomsUrl = "/rest/v1/events/" + eventId + "/schedule/rooms";
+    var presentationsUrl = "/rest/v1/events/" + eventId + "/presentations";
+    console.log("Presentations Url: " + presentationsUrl);
+
+    getDevoxxData({
+        req: req,
+        res: res,
+        url: roomsUrl,
+        cacheKey: roomsUrl,
+        forceNoCache: getIfUseCache(req),
+        callback: onTracksDataLoaded,
+        roomId: roomId,
+        eventId: eventId
+    });
+
+    function onPresentationsLoaded(statusCode, statusMessage, presentations, options) {
+        if (statusCode !== 200) {
+            responseData(statusCode, statusMessage, presentations, options);
+        }
+        else {
+            var room = _(JSON.parse(options.rooms)).find(function(room) {
+                return room.id === Number(roomId);
+            });
+            var roomPresentations = _(JSON.parse(presentations)).filter(function(presentation) { return presentation.room === room.name; });
+            responseData(statusCode, statusMessage, JSON.stringify(roomPresentations), options)
+        }
+    }
+
+    function onTracksDataLoaded(statusCode, statusMessage, rooms, options) {
+        if (statusCode !== 200) {
+            responseData(statusCode, statusMessage, rooms, options);
+        }
+        else {
+            getDevoxxData({
+                req: req,
+                res: res,
+                url: presentationsUrl,
+                cacheKey: presentationsUrl,
+                forceNoCache: getIfUseCache(req),
+                callback: onPresentationsLoaded,
+                rooms: rooms
             });
         }
     }

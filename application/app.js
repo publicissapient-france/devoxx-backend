@@ -507,8 +507,21 @@ app.get('/rest/v1/events/:eventId/tracks/:trackId', function (req, res) {
             var track = _(JSON.parse(options.tracks)).find(function(track) {
                 return track.id === Number(trackId);
             });
-            var trackPresentations = _(JSON.parse(presentations)).filter(function(presentation) { return presentation.track === track.name; });
-            responseData(statusCode, statusMessage, JSON.stringify(trackPresentations), options)
+
+            presentations = JSON.parse(presentations);
+
+            var idempotentCache = [];
+            presentations = _(presentations).filter(function(presentation) {
+                if (_(idempotentCache).contains(presentation.id)) {
+                    return false;
+                }
+                idempotentCache.push(presentation.id);
+
+                return true;
+            });
+
+            presentations = _(presentations).filter(function(presentation) { return track && presentation.track === track.name; });
+            responseData(statusCode, statusMessage, JSON.stringify(presentations), options)
         }
     }
 
@@ -568,8 +581,22 @@ app.get('/rest/v1/events/:eventId/rooms/:roomId', function (req, res) {
             var room = _(JSON.parse(options.rooms)).find(function(room) {
                 return room.id === Number(roomId);
             });
-            var roomPresentations = _(JSON.parse(presentations)).filter(function(presentation) { return presentation.room === room.name; });
-            responseData(statusCode, statusMessage, JSON.stringify(roomPresentations), options)
+
+            presentations = JSON.parse(presentations);
+
+            var idempotentCache = [];
+            presentations = _(presentations).filter(function(presentation) {
+                if (_(idempotentCache).contains(presentation.id)) {
+                    return false;
+                }
+                idempotentCache.push(presentation.id);
+
+                return true;
+            });
+
+            presentations = _(presentations).filter(function(presentation) { return room && presentation.room === room.name; });
+
+            responseData(statusCode, statusMessage, JSON.stringify(presentations), options)
         }
     }
 
@@ -643,6 +670,17 @@ app.get('/rest/v1/events/:eventId/presentations', function (req, res) {
         }
         else {
             presentations = JSON.parse(presentations);
+
+            var idempotentCache = [];
+            presentations = _(presentations).filter(function(presentation) {
+                if (_(idempotentCache).contains(presentation.id)) {
+                    return false;
+                }
+                idempotentCache.push(presentation.id);
+
+                return true;
+            });
+
             _(presentations).each(function(presentation) {
                 if (presentation.room) {
                     var room = _(options.rooms).find(function(room) {
@@ -666,6 +704,98 @@ app.get('/rest/v1/events/:eventId/presentations', function (req, res) {
     }
 
 });
+
+app.get('/rest/v1/events/:eventId/schedule', function (req, res) {
+
+    var eventId = req.params.eventId;
+    console.log("EventId: " + eventId);
+    var scheduleUrl = "/rest/v1/events/" + eventId + "/schedule";
+    console.log("Schedule Url: " + scheduleUrl);
+
+    var options = {
+        req: req,
+        res: res,
+        url: scheduleUrl,
+        cacheKey: scheduleUrl,
+        forceNoCache: getIfUseCache(req),
+        callback: onScheduleDataLoaded,
+        eventId: eventId
+    };
+
+    try {
+        getData(options);
+    } catch(err) {
+        var errorMessage = err.name + ": " + err.message;
+        responseData(500, errorMessage, undefined, options);
+    }
+
+    function onScheduleDataLoaded(statusCode, statusMessage, schedule, options) {
+        if (statusCode !== 200) {
+            responseData(statusCode, statusMessage, schedule, options);
+        }
+        else {
+            schedule = JSON.parse(schedule);
+            var idempotentCache = [];
+            schedule = _(schedule).filter(function(presentation) {
+                if (_(idempotentCache).contains(presentation.id)) {
+                    return false;
+                }
+                idempotentCache.push(presentation.id);
+
+                return true;
+            });
+            responseData(statusCode, statusMessage, JSON.stringify(schedule), options)
+        }
+    }
+
+});
+
+app.get('/rest/v1/events/:eventId/speakers', function (req, res) {
+
+    var eventId = req.params.eventId;
+    console.log("EventId: " + eventId);
+    var speakersUrl = "/rest/v1/events/" + eventId + "/speakers";
+    console.log("Speakers Url: " + speakersUrl);
+
+    var options = {
+        req: req,
+        res: res,
+        url: speakersUrl,
+        cacheKey: speakersUrl,
+        forceNoCache: getIfUseCache(req),
+        callback: onSpeakersDataLoaded,
+        eventId: eventId
+    };
+
+    try {
+        getData(options);
+    } catch(err) {
+        var errorMessage = err.name + ": " + err.message;
+        responseData(500, errorMessage, undefined, options);
+    }
+
+    function onSpeakersDataLoaded(statusCode, statusMessage, speakers, options) {
+        if (statusCode !== 200) {
+            responseData(statusCode, statusMessage, speakers, options);
+        }
+        else {
+            speakers = JSON.parse(speakers);
+            var idempotentCache = [];
+            speakers = _(speakers).filter(function(speaker) {
+                if (_(idempotentCache).contains(speaker.id)) {
+                    return false;
+                }
+                idempotentCache.push(speaker.id);
+
+                return true;
+            });
+            responseData(statusCode, statusMessage, JSON.stringify(speakers), options)
+        }
+    }
+
+});
+
+
 
 app.get('/*', function(req, res) {
 

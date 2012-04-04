@@ -558,6 +558,8 @@ app.get('/rest/v1/events/:eventId/tracks/:trackId', function (req, res) {
             });
 
             presentations = _(presentations).filter(function(presentation) { return track && presentation.track === track.name; });
+            presentations = _(presentations).sortBy(function(presentation) { return presentation.id; });
+
             responseData(statusCode, statusMessage, JSON.stringify(presentations), options)
         }
     }
@@ -632,6 +634,7 @@ app.get('/rest/v1/events/:eventId/rooms/:roomId', function (req, res) {
             });
 
             presentations = _(presentations).filter(function(presentation) { return room && presentation.room === room.name; });
+            presentations = _(presentations).sortBy(function(presentation) { return presentation.id; });
 
             responseData(statusCode, statusMessage, JSON.stringify(presentations), options)
         }
@@ -736,6 +739,8 @@ app.get('/rest/v1/events/:eventId/presentations', function (req, res) {
                     }
                 }
             });
+            presentations = _(presentations).sortBy(function(presentation) { return presentation.id; });
+
             responseData(statusCode, statusMessage, JSON.stringify(presentations), options)
         }
     }
@@ -781,6 +786,8 @@ app.get('/rest/v1/events/:eventId/schedule', function (req, res) {
 
                 return true;
             });
+            schedule = _(schedule).sortBy(function(presentation) { return presentation.fromTime; });
+
             responseData(statusCode, statusMessage, JSON.stringify(schedule), options)
         }
     }
@@ -826,6 +833,8 @@ app.get('/rest/v1/events/:eventId/speakers', function (req, res) {
 
                 return true;
             });
+
+            speakers = _(speakers).sortBy(function(speaker) { return speaker.firstName + " " + speaker.lastName; });
             responseData(statusCode, statusMessage, JSON.stringify(speakers), options)
         }
     }

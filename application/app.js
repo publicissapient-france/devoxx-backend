@@ -9,7 +9,6 @@ var mysql = require('mysql');
 var underscore = require("underscore");
 var cf = require("cloudfoundry");
 
-var OFFLINE = false;
 var EXPIRE_CACHE = true;
 var USE_CACHE = true;
 
@@ -802,6 +801,7 @@ function processSpeakerImage(options, callback) {
 //    process.nextTick(initSpeakerCacheData);
 //}
 //
+// var OFFLINE = false;
 //
 //if (OFFLINE) {
 //

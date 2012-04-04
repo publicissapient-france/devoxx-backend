@@ -326,6 +326,43 @@ function fetchDataFromDevoxxUrl(options) {
     });
 }
 
+function processSpeakerImage(options, callback) {
+    try {
+        if (useCache(options) && imageUriCache[options.cacheKey]) {
+            callback({ imageURI: imageUriCache[options.cacheKey] });
+        }
+        else {
+            console.log("[" + options.url + "] No cached reply found for key: '" + options.cacheKey + "'");
+            var targetUrl = 'https://cfp.devoxx.com/rest/v1/events/speakers/' + options.speakerId;
+            console.log("[" + options.url + "] Fetching data from url: '" + targetUrl + "'");
+            restler.get(targetUrl).on('complete', function (data, response) {
+                var contentType = response.header("Content-Type");
+                console.log("[" + options.url + "] Http Response - Content-Type: " + contentType);
+                if ( contentType.indexOf('json') === -1 && contentType.indexOf('script') === -1 ) {
+                    console.log("[" + options.url + "] Content-Type is not json or javascript: Not caching data and returning response directly");
+                    callback({ imageURI: "https://cfp.devoxx.com/img/thumbnail.gif" });
+                }
+                else {
+                    if ( data.imageURI && data.imageURI.indexOf(".devoxx.com/img/thumbnail.gif") >= 0 ) {
+                        callback({ imageURI: "https://cfp.devoxx.com/img/thumbnail.gif" });
+                    }
+                    else {
+                        console.log("[" + options.url + "] Fetched Response from url '" + targetUrl + "': " + data.imageURI);
+                        request(data.imageURI, function(err, response, body) {
+                            var imageUriValid = response.statusCode === 200 && response.header("Content-Type").indexOf("image") !== -1;
+                            callback({ imageURI: imageUriValid ? data.imageURI : "https://cfp.devoxx.com/img/thumbnail.gif" });
+                        });
+                    }
+                }
+            });
+        }
+    } catch(err) {
+        var errorMessage = err.name + ": " + err.message;
+        console.log(errorMessage);
+        options.res.send(errorMessage, 500);
+    }
+}
+
 app.get('/', function(req, res) {
     console.log('File path: ' + __dirname + '/www/index.html');
     res.sendfile(__dirname + '/www/index.html');
@@ -795,27 +832,6 @@ app.get('/rest/v1/events/:eventId/speakers', function (req, res) {
 
 });
 
-
-
-app.get('/*', function(req, res) {
-
-    var options = {
-        req: req,
-        res: res,
-        url: getUrlToFetch(req),
-        cacheKey: getCacheKey(req),
-        forceNoCache: getIfUseCache(req),
-        callback: responseData
-    };
-
-    try {
-        getData(options);
-    } catch(err) {
-        var errorMessage = err.name + ": " + err.message;
-        responseData(500, errorMessage, undefined, options);
-    }
-});
-
 app.get('/speaker/:id', function(req, res) {
 
     var cacheKey = "/data/image/speakers/" + req.params.id;
@@ -844,43 +860,24 @@ app.get('/speaker/:id', function(req, res) {
 
 });
 
-function processSpeakerImage(options, callback) {
+app.get('/*', function(req, res) {
+
+    var options = {
+        req: req,
+        res: res,
+        url: getUrlToFetch(req),
+        cacheKey: getCacheKey(req),
+        forceNoCache: getIfUseCache(req),
+        callback: responseData
+    };
+
     try {
-        if (useCache(options) && imageUriCache[options.cacheKey]) {
-            callback({ imageURI: imageUriCache[options.cacheKey] });
-        }
-        else {
-            console.log("[" + options.url + "] No cached reply found for key: '" + options.cacheKey + "'");
-            var targetUrl = 'https://cfp.devoxx.com/rest/v1/events/speakers/' + options.speakerId;
-            console.log("[" + options.url + "] Fetching data from url: '" + targetUrl + "'");
-            restler.get(targetUrl).on('complete', function (data, response) {
-                var contentType = response.header("Content-Type");
-                console.log("[" + options.url + "] Http Response - Content-Type: " + contentType);
-                if ( contentType.indexOf('json') === -1 && contentType.indexOf('script') === -1 ) {
-                    console.log("[" + options.url + "] Content-Type is not json or javascript: Not caching data and returning response directly");
-                    callback({ imageURI: "https://cfp.devoxx.com/img/thumbnail.gif" });
-                }
-                else {
-                    if ( data.imageURI && data.imageURI.indexOf(".devoxx.com/img/thumbnail.gif") >= 0 ) {
-                        callback({ imageURI: "https://cfp.devoxx.com/img/thumbnail.gif" });
-                    }
-                    else {
-                        console.log("[" + options.url + "] Fetched Response from url '" + targetUrl + "': " + data.imageURI);
-                        request(data.imageURI, function(err, response, body) {
-                            var imageUriValid = response.statusCode === 200 && response.header("Content-Type").indexOf("image") !== -1;
-                            callback({ imageURI: imageUriValid ? data.imageURI : "https://cfp.devoxx.com/img/thumbnail.gif" });
-                        });
-                    }
-                }
-            });
-        }
+        getData(options);
     } catch(err) {
         var errorMessage = err.name + ": " + err.message;
-        console.log(errorMessage);
-        options.res.send(errorMessage, 500);
+        responseData(500, errorMessage, undefined, options);
     }
-}
-
+});
 
 //app.post('/load-redis-data', function(req, res) {
 //    console.log('Processing JSON request');

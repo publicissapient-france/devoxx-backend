@@ -404,7 +404,7 @@ app.get('/twitter/:user', function(req, res) {
                     user: {
                         screen_name: tweet.user.screen_name,
                         name: tweet.user.name,
-                        icon: tweet.user.profile_image_url
+                        profile_image_url: tweet.user.profile_image_url
                     },
                     text: tweet.text
 

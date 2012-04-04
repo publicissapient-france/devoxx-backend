@@ -464,6 +464,7 @@ function processSpeakerImage(options, callback) {
 }
 
 app.get('/rest/v1/events/:eventId/tracks/:trackId', function (req, res) {
+
     var eventId = req.params.eventId;
     console.log("EventId: " + eventId);
     var trackId = req.params.trackId;
@@ -483,19 +484,6 @@ app.get('/rest/v1/events/:eventId/tracks/:trackId', function (req, res) {
         eventId: eventId
     });
 
-    function onPresentationsLoaded(statusCode, statusMessage, presentations, options) {
-        if (statusCode !== 200) {
-            responseData(statusCode, statusMessage, presentations, options);
-        }
-        else {
-            var track = _(JSON.parse(options.tracks)).find(function(track) {
-                return track.id === Number(trackId);
-            });
-            var trackPresentations = _(JSON.parse(presentations)).filter(function(presentation) { return presentation.track === track.name; });
-            responseData(statusCode, statusMessage, JSON.stringify(trackPresentations), options)
-        }
-    }
-
     function onTracksDataLoaded(statusCode, statusMessage, tracks, options) {
         if (statusCode !== 200) {
             responseData(statusCode, statusMessage, tracks, options);
@@ -513,9 +501,23 @@ app.get('/rest/v1/events/:eventId/tracks/:trackId', function (req, res) {
         }
     }
 
+    function onPresentationsLoaded(statusCode, statusMessage, presentations, options) {
+        if (statusCode !== 200) {
+            responseData(statusCode, statusMessage, presentations, options);
+        }
+        else {
+            var track = _(JSON.parse(options.tracks)).find(function(track) {
+                return track.id === Number(trackId);
+            });
+            var trackPresentations = _(JSON.parse(presentations)).filter(function(presentation) { return presentation.track === track.name; });
+            responseData(statusCode, statusMessage, JSON.stringify(trackPresentations), options)
+        }
+    }
+
 });
 
 app.get('/rest/v1/events/:eventId/rooms/:roomId', function (req, res) {
+
     var eventId = req.params.eventId;
     console.log("EventId: " + eventId);
     var roomId = req.params.roomId;
@@ -530,10 +532,27 @@ app.get('/rest/v1/events/:eventId/rooms/:roomId', function (req, res) {
         url: roomsUrl,
         cacheKey: roomsUrl,
         forceNoCache: getIfUseCache(req),
-        callback: onTracksDataLoaded,
+        callback: onRoomsDataLoaded,
         roomId: roomId,
         eventId: eventId
     });
+
+    function onRoomsDataLoaded(statusCode, statusMessage, rooms, options) {
+        if (statusCode !== 200) {
+            responseData(statusCode, statusMessage, rooms, options);
+        }
+        else {
+            getDevoxxData({
+                req: req,
+                res: res,
+                url: presentationsUrl,
+                cacheKey: presentationsUrl,
+                forceNoCache: getIfUseCache(req),
+                callback: onPresentationsLoaded,
+                rooms: rooms
+            });
+        }
+    }
 
     function onPresentationsLoaded(statusCode, statusMessage, presentations, options) {
         if (statusCode !== 200) {
@@ -548,9 +567,47 @@ app.get('/rest/v1/events/:eventId/rooms/:roomId', function (req, res) {
         }
     }
 
-    function onTracksDataLoaded(statusCode, statusMessage, rooms, options) {
+});
+
+app.get('/rest/v1/events/:eventId/presentations', function (req, res) {
+
+    var eventId = req.params.eventId;
+    console.log("EventId: " + eventId);
+    var tracksUrl = "/rest/v1/events/" + eventId + "/tracks";
+    var roomsUrl = "/rest/v1/events/" + eventId + "/schedule/rooms";
+    var presentationsUrl = "/rest/v1/events/" + eventId + "/presentations";
+    console.log("Presentations Url: " + presentationsUrl);
+
+    getDevoxxData({
+        req: req,
+        res: res,
+        url: roomsUrl,
+        cacheKey: roomsUrl,
+        forceNoCache: getIfUseCache(req),
+        callback: onRoomsDataLoaded,
+        eventId: eventId
+    });
+
+    function onRoomsDataLoaded(statusCode, statusMessage, rooms, options) {
         if (statusCode !== 200) {
             responseData(statusCode, statusMessage, rooms, options);
+        }
+        else {
+            getDevoxxData({
+                req: req,
+                res: res,
+                url: tracksUrl,
+                cacheKey: tracksUrl,
+                forceNoCache: getIfUseCache(req),
+                callback: onTracksDataLoaded,
+                rooms: JSON.parse(rooms)
+            });
+        }
+    }
+
+    function onTracksDataLoaded(statusCode, statusMessage, tracks, options) {
+        if (statusCode !== 200) {
+            responseData(statusCode, statusMessage, tracks, options);
         }
         else {
             getDevoxxData({
@@ -560,8 +617,37 @@ app.get('/rest/v1/events/:eventId/rooms/:roomId', function (req, res) {
                 cacheKey: presentationsUrl,
                 forceNoCache: getIfUseCache(req),
                 callback: onPresentationsLoaded,
-                rooms: rooms
+                rooms: options.rooms,
+                tracks: JSON.parse(tracks)
             });
+        }
+    }
+
+    function onPresentationsLoaded(statusCode, statusMessage, presentations, options) {
+        if (statusCode !== 200) {
+            responseData(statusCode, statusMessage, presentations, options);
+        }
+        else {
+            presentations = JSON.parse(presentations);
+            _(presentations).each(function(presentation) {
+                if (presentation.room) {
+                    var room = _(options.rooms).find(function(room) {
+                        return room.name == presentation.room;
+                    });
+                    if (room) {
+                        presentation.roomId = room.id;
+                    }
+                }
+                if (presentation.track) {
+                    var track = _(options.tracks).find(function(track) {
+                        return track.name == presentation.track;
+                    });
+                    if (track) {
+                        presentation.trackId = track.id;
+                    }
+                }
+            });
+            responseData(statusCode, statusMessage, JSON.stringify(presentations), options)
         }
     }
 

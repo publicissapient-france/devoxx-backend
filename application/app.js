@@ -490,6 +490,45 @@ app.get('/xebia/program', function(req, res) {
 
 });
 
+app.get('/xebian/:xebianId', function(req, res) {
+
+    var xebianId = req.params.xebianId;
+    console.log("XebianId: " + xebianId);
+
+    var xebianUrl = "http://devoxx.helyx.org/data/authors/" + xebianId + ".json";
+    console.log("Xebia Program Url: " + xebianUrl);
+
+    var options = {
+        req: req,
+        res: res,
+        url: xebianUrl,
+        cacheKey: '/xebian/' + xebianId,
+        forceNoCache: getIfUseCache(req),
+        callback: onXebianDataLoaded,
+        cacheTimeout: 60,
+        standaloneUrl: true
+    };
+
+    try {
+        getData(options);
+    } catch(err) {
+        var errorMessage = err.name + ": " + err.message;
+        responseData(500, errorMessage, undefined, options);
+    }
+
+    function onXebianDataLoaded(statusCode, statusMessage, xebian, options) {
+        if (statusCode !== 200) {
+            responseData(statusCode, statusMessage, xebian, options);
+        }
+        else {
+            var callback = getParameterByName(req.url, 'callback');
+            res.header('Content-Type', 'application/javascript');
+            res.send(callback + "(" + xebian + ");");
+        }
+    }
+
+});
+
 app.get('/rest/v1/events/:eventId/tracks/:trackId', function (req, res) {
 
     var eventId = req.params.eventId;

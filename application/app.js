@@ -398,6 +398,80 @@ app.all('/register', function(req, res) {
     res.send("Only HTTP POST requests accepted", 401);
 });
 
+app.post('/shake', function(req, res) {
+    if (req.body.secret == process.env.secret) {
+        mysqlClient.query('update registration set winner=0',
+            function selectCb(err) {
+                if (err) {
+                    var errorMessage = err.name + ": " + err.message;
+                    console.log(errorMessage);
+                    res.send(errorMessage, 500);
+                }
+                else {
+                    mysqlClient.query( 'select id from registration order by rand() limit 1',
+                        function selectCb(err, results, fields) {
+                            if (err) {
+                                var errorMessage = err.name + ": " + err.message;
+                                console.log(errorMessage);
+                                res.send(errorMessage, 500);
+                            }
+                            else {
+                                var randomId = results[0]['id'];
+
+                                mysqlClient.query( 'update registration set winner=1 where id=?', [randomId],
+                                    function selectCb(err) {
+                                        if (err) {
+                                            var errorMessage = err.name + ": " + err.message;
+                                            console.log(errorMessage);
+                                            res.send(errorMessage, 500);
+                                        }
+                                        else {
+                                            res.send('success');
+                                        }
+                                    }
+                                );
+
+                            }
+                        }
+                    );
+                }
+            }
+        );
+    }
+    else {
+        res.send("Wrong secret!", 500);
+    }
+});
+
+app.all('/shake', function(req, res) {
+    res.send("Only HTTP POST requests accepted", 401);
+});
+
+app.get('/winner', function(req, res) {
+    mysqlClient.query( 'select * from registration where winner=1 order by rand() limit 1',
+        function selectCb(err, results, fields) {
+            if (err) {
+                var errorMessage = err.name + ": " + err.message;
+                console.log(errorMessage);
+                res.send(errorMessage, 500);
+            }
+            else {
+                var id = results[0]['id'];
+                var firstname = results[0]['firstname'];
+                var lastname = results[0]['lastname'];
+
+                res.send("The winner is: " + id + " - " + firstname + " " + lastname);
+            }
+        }
+    );
+});
+
+
+app.all('/winner', function(req, res) {
+    res.send("Only HTTP GET requests accepted", 401);
+});
+
+
 app.get('/twitter/:user', function(req, res) {
 
     var user = req.params.user;
